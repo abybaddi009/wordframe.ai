@@ -1,0 +1,64 @@
+# WordFrame Landing Page - Developer Guidelines
+
+## Project Overview
+WordFrame is a landing page for a web app that converts photos to ASCII art and creates word search puzzles from them.
+
+## Tech Stack
+- **Frontend**: Vite + React + TypeScript
+- **Styling**: Tailwind CSS with custom color scheme
+- **UI Components**: shadcn/ui
+- **Icons**: Lucide React
+- **Package Manager**: Bun
+
+## Design System
+**Primary Colors:**
+- Purple: `purple-600`, `purple-50` (primary brand)
+- Pink: `pink-500`, `pink-300` (accent/CTA)
+- Blue: `blue-600`, `indigo-700` (supporting)
+- Gradients: Purple-to-pink, blue-to-indigo combinations
+
+## Component Architecture
+Landing page uses modular, reusable components with parallax scrolling:
+
+### Components (`/src/components/`)
+- `Header.tsx` - Fixed navigation with brand and CTA
+- `Hero.tsx` - Full-screen hero with parallax background
+- `HowItWorks.tsx` - 3-step process explanation
+- `Gallery.tsx` - 6 placeholder example showcases
+- `CallToAction.tsx` - Final conversion section
+- `Footer.tsx` - Links, social media, company info
+
+### Key Features
+- **Parallax Effects**: All sections use `scrollY` prop for different movement speeds
+- **Color Consistency**: Purple/pink/blue gradient theme throughout
+- **Responsive**: Mobile-first design with `md:` breakpoints
+- **Hover Animations**: Cards scale/shadow on hover
+- **CTA Focus**: Multiple "Create Your Puzzle" call-to-actions
+
+## File Structure
+```
+src/
+├── components/
+│   ├── ui/button.tsx (shadcn)
+│   ├── ui/card.tsx (shadcn)
+│   ├── Header.tsx
+│   ├── Hero.tsx
+│   ├── HowItWorks.tsx
+│   ├── Gallery.tsx
+│   ├── CallToAction.tsx
+│   └── Footer.tsx
+└── App.tsx (assembles all components)
+```
+
+## Development Notes
+- All components accept `scrollY` prop for parallax
+- Consistent icon usage from Lucide React
+- Button variants follow shadcn patterns
+- Gallery uses placeholder gradients (ready for real images)
+- Footer includes social links structure
+
+## Next Steps
+- Replace gallery placeholders with actual word search examples
+- Implement routing to word search builder page
+- Add mobile menu for navigation
+- Connect CTA buttons to actual upload functionality 

@@ -1,11 +1,15 @@
-import { Button } from "@/components/ui/button";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HomePage } from '@/components/HomePage';
+import { PuzzleBuilder } from '@/components/PuzzleBuilder';
 
 function App() {
   return (
-    <div className="flex flex-col items-center justify-center h-screen">
-      <h1 className="text-4xl font-bold">Hello world!</h1>
-      <Button>Click me</Button>
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/builder" element={<PuzzleBuilder />} />
+      </Routes>
+    </Router>
   );
 }
 
