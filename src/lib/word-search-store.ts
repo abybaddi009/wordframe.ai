@@ -77,8 +77,8 @@ export const useWordSearchStore = create<WordSearchStore>((set, get) => ({
     setPaperDimensions: (width: number, height: number) => {
       console.log('📄 Setting paper dimensions:', { width, height });
       const { charactersPerMm } = get();
-      const gridWidth = Math.floor(width * charactersPerMm);
-      const gridHeight = Math.floor(height * charactersPerMm);
+      const gridWidth = Math.floor(width / charactersPerMm);
+      const gridHeight = Math.floor(height / charactersPerMm);
       
       console.log('🎯 Calculated grid size:', { gridWidth, gridHeight });
       
@@ -134,23 +134,46 @@ export const useWordSearchStore = create<WordSearchStore>((set, get) => ({
         return;
       }
       
-      set({ isGenerating: true, error: null, generationStep: 'Analyzing image...' });
+      set({ isGenerating: true, error: null, generationStep: 'Creating empty grid...' });
       
       try {
-        // Step 1: Analyze threshold image to determine available positions
-        console.log('🔍 Step 1: Analyzing threshold image...');
+        // Step 1: Create empty grid first to show structure
+        console.log('🎯 Step 1: Creating empty grid...');
+        const grid: GridCell[][] = Array(gridHeight).fill(null).map(() =>
+          Array(gridWidth).fill(null).map(() => ({
+            letter: '',
+            isWordLetter: false,
+            wordIds: []
+          }))
+        );
+        
+        // Update state to show empty grid
+        set({ 
+          grid,
+          generationStep: 'Analyzing image for available positions...' 
+        });
+        
+        // Add small delay for visualization
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Step 2: Analyze threshold image to determine available positions
+        console.log('🔍 Step 2: Analyzing threshold image...');
         const availablePositions = await analyzeThresholdImage(thresholdImage, gridWidth, gridHeight);
         
+        // Update state to show available positions
         set({ 
           availablePositions, 
           generationStep: 'Calculating word requirements...' 
         });
         
-        // Step 2: Calculate how many characters can fit
+        // Add delay to show available positions
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Step 3: Calculate how many characters can fit
         const totalAvailableSpaces = availablePositions.flat().filter(Boolean).length;
         console.log('🎯 Total available character spaces:', totalAvailableSpaces);
         
-        // Step 3: Determine if we need more words
+        // Step 4: Determine if we need more words
         const totalWordCharacters = words.reduce((sum, word) => sum + word.word.length, 0);
         console.log('📊 Current word characters:', totalWordCharacters);
         console.log('📊 Available spaces:', totalAvailableSpaces);
@@ -179,28 +202,22 @@ export const useWordSearchStore = create<WordSearchStore>((set, get) => ({
               console.log('⚠️ Failed to generate additional words, continuing with existing words');
             }
           }
+          
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
         
-        set({ generationStep: 'Creating puzzle grid...' });
+        set({ generationStep: 'Placing words in grid...' });
         
-        // Step 4: Create empty grid
-        const grid: GridCell[][] = Array(gridHeight).fill(null).map(() =>
-          Array(gridWidth).fill(null).map(() => ({
-            letter: '',
-            isWordLetter: false,
-            wordIds: []
-          }))
-        );
-        
-        // Step 5: Place words in the grid
+        // Step 5: Place words in the grid with visual updates
         console.log('🎯 Step 5: Placing words in grid...');
-        const placedWords = placeWordsInGrid(grid, finalWords, availablePositions);
+        const placedWords = await placeWordsInGridWithUpdates(grid, finalWords, availablePositions, set);
         
         set({ generationStep: 'Filling empty spaces...' });
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         // Step 6: Fill remaining available spaces with random letters
         console.log('🎲 Step 6: Filling with random letters...');
-        fillEmptySpaces(grid, availablePositions);
+        await fillEmptySpacesWithUpdates(grid, availablePositions, set);
         
         console.log('✅ Puzzle generation completed successfully');
         console.log('📊 Final stats:', {
@@ -213,8 +230,12 @@ export const useWordSearchStore = create<WordSearchStore>((set, get) => ({
           words: placedWords,
           grid,
           isGenerating: false,
-          generationStep: ''
+          generationStep: 'Complete!'
         });
+        
+        // Show completion message briefly
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        set({ generationStep: '' });
         
       } catch (error) {
         console.error('❌ Error generating puzzle:', error);
@@ -313,8 +334,8 @@ async function analyzeThresholdImage(imageUrl: string, gridWidth: number, gridHe
             const index = (y * gridWidth + x) * 4;
             const red = data[index];
             
-            // If pixel is white (or close to white), it's available
-            if (red > 200) {
+            // If pixel is white (or close to black), it's available
+            if (red < 100) {
               availablePositions[y][x] = true;
               availableCount++;
             }
@@ -336,6 +357,94 @@ async function analyzeThresholdImage(imageUrl: string, gridWidth: number, gridHe
     img.onerror = () => reject(new Error('Failed to load threshold image'));
     img.src = imageUrl;
   });
+}
+
+// Helper function to place words in grid with visual updates
+async function placeWordsInGridWithUpdates(
+  grid: GridCell[][],
+  words: WordSearchWord[],
+  availablePositions: boolean[][],
+  set: any
+): Promise<WordSearchWord[]> {
+  console.log('🎯 Placing words in grid with visual updates...');
+  
+  const directions = ['horizontal', 'vertical', 'diagonal-down', 'diagonal-up'] as const;
+  const placedWords = [...words];
+  let placedCount = 0;
+  
+  // Sort words by length (longest first for better placement)
+  const sortedWords = [...placedWords].sort((a, b) => b.word.length - a.word.length);
+  
+  for (const word of sortedWords) {
+    let placed = false;
+    const attempts = 100; // Max attempts per word
+    
+    for (let attempt = 0; attempt < attempts && !placed; attempt++) {
+      const direction = directions[Math.floor(Math.random() * directions.length)];
+      const position = findValidPosition(word.word, direction, grid, availablePositions);
+      
+      if (position) {
+        placeWordInGrid(word, position, direction, grid);
+        word.placed = true;
+        word.startRow = position.row;
+        word.startCol = position.col;
+        word.direction = direction;
+        placed = true;
+        placedCount++;
+        
+        console.log(`✅ Placed "${word.word}" at (${position.row}, ${position.col}) ${direction}`);
+        
+        // Update the grid state to show the new word
+        set((state: any) => ({
+          ...state,
+          grid: [...grid.map(row => [...row])], // Create deep copy
+          words: [...placedWords],
+          generationStep: `Placing words... (${placedCount}/${words.length})`
+        }));
+        
+        // Small delay to show each word placement
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+    
+    if (!placed) {
+      console.log(`❌ Failed to place word: ${word.word}`);
+    }
+  }
+  
+  console.log(`📊 Placed ${placedCount}/${words.length} words`);
+  return placedWords;
+}
+
+// Helper function to fill empty spaces with visual updates
+async function fillEmptySpacesWithUpdates(grid: GridCell[][], availablePositions: boolean[][], set: any): Promise<void> {
+  console.log('🎲 Filling empty spaces with random letters...');
+  
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let filledCount = 0;
+  const totalToFill = availablePositions.flat().filter((pos, i) => pos && !grid.flat()[i]?.letter).length;
+  
+  for (let row = 0; row < grid.length; row++) {
+    for (let col = 0; col < grid[0].length; col++) {
+      if (!grid[row][col].letter) {
+        grid[row][col].letter = letters[Math.floor(Math.random() * letters.length)];
+        filledCount++;
+        
+        // Update state every few letters for visual effect
+        if (filledCount % 100 === 0 || filledCount === totalToFill) {
+          set((state: any) => ({
+            ...state,
+            grid: [...grid.map(row => [...row])],
+            generationStep: `Filling spaces... (${filledCount}/${totalToFill})`
+          }));
+          
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+    }
+  }
+  
+  console.log(`✅ Filled ${filledCount} empty spaces with random letters`);
 }
 
 // Helper function to place words in grid
@@ -501,7 +610,7 @@ function fillEmptySpaces(grid: GridCell[][], availablePositions: boolean[][]): v
   
   for (let row = 0; row < grid.length; row++) {
     for (let col = 0; col < grid[0].length; col++) {
-      if (availablePositions[row][col] && !grid[row][col].letter) {
+      if (!availablePositions[row][col]) {
         grid[row][col].letter = letters[Math.floor(Math.random() * letters.length)];
         filledCount++;
       }

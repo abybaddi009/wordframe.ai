@@ -131,8 +131,8 @@ export function PuzzleBuilder() {
     if (!thresholdImage || words.length === 0) return;
     
     try {
-      await wordSearchActions.generatePuzzle(thresholdImage);
       setShowPuzzle(true);
+      await wordSearchActions.generatePuzzle(thresholdImage);
     } catch (error) {
       console.error('Failed to generate puzzle:', error);
     }

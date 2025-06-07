@@ -13,6 +13,7 @@ export function WordSearchGrid({ className }: WordSearchGridProps) {
   const { 
     grid, 
     words, 
+    availablePositions,
     isGenerating, 
     generationStep, 
     error,
@@ -32,6 +33,33 @@ export function WordSearchGrid({ className }: WordSearchGridProps) {
   };
 
   const cellSize = getCellSize();
+
+  // Helper function to determine cell styling
+  const getCellStyling = (cell: any, rowIndex: number, colIndex: number) => {
+    // During generation, show available positions
+    if (isGenerating && availablePositions.length > 0) {
+      const isAvailable = availablePositions[rowIndex]?.[colIndex];
+      
+      if (cell.isWordLetter) {
+        return 'bg-purple-200 text-purple-900 border-purple-300';
+      } else if (cell.letter) {
+        return 'bg-gray-100 text-gray-700 border-gray-200';
+      } else if (isAvailable) {
+        return 'bg-green-50 text-green-600 border-green-200 animate-pulse';
+      } else {
+        return 'bg-red-50 text-red-400 border-red-200';
+      }
+    }
+    
+    // Normal display after generation
+    if (cell.isWordLetter) {
+      return 'bg-purple-100 text-purple-800 border-purple-200';
+    } else if (cell.letter) {
+      return 'bg-gray-50 text-gray-600 border-gray-200';
+    } else {
+      return 'bg-white border-gray-200';
+    }
+  };
 
   if (error) {
     return (
@@ -55,17 +83,97 @@ export function WordSearchGrid({ className }: WordSearchGridProps) {
 
   if (isGenerating) {
     return (
-      <Card className={className}>
-        <CardContent className="p-6">
-          <div className="flex flex-col items-center justify-center space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            <div className="text-center">
-              <p className="font-semibold text-gray-900">Generating Puzzle...</p>
-              <p className="text-sm text-gray-600 mt-1">{generationStep}</p>
+      <div className={`space-y-4 ${className}`}>
+        {/* Generation Progress */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+              <div className="text-center">
+                <p className="font-semibold text-gray-900">Generating Puzzle...</p>
+                <p className="text-sm text-purple-600 mt-1">{generationStep}</p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Show grid during generation if available */}
+        {grid.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                Puzzle Progress
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  {availablePositions.length > 0 && (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-green-100 border border-green-200 rounded"></div>
+                        <span className="text-xs">Available</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-red-100 border border-red-200 rounded"></div>
+                        <span className="text-xs">Blocked</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-purple-100 border border-purple-200 rounded"></div>
+                        <span className="text-xs">Words</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col items-center space-y-4">
+                {/* Grid */}
+                <div 
+                  className="inline-block border-2 border-gray-300 bg-white p-2 rounded-lg shadow-sm"
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: `${Math.max(8, cellSize - 4)}px`,
+                    lineHeight: '1'
+                  }}
+                >
+                  {grid.map((row, rowIndex) => (
+                    <div key={rowIndex} className="flex">
+                      {row.map((cell, colIndex) => (
+                        <div
+                          key={colIndex}
+                          className={`
+                            flex items-center justify-center font-bold transition-all duration-200
+                            ${getCellStyling(cell, rowIndex, colIndex)}
+                          `}
+                          style={{
+                            width: `${cellSize}px`,
+                            height: `${cellSize}px`,
+                            fontSize: `${Math.max(6, cellSize - 8)}px`
+                          }}
+                        >
+                          {cell.letter}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Generation Stats */}
+                <div className="text-xs text-gray-500 text-center space-y-1">
+                  <p>Grid: {grid[0]?.length || 0} × {grid.length} characters</p>
+                  {availablePositions.length > 0 && (
+                    <p>
+                      Available: {availablePositions.flat().filter(Boolean).length} / {availablePositions.flat().length} spaces
+                      ({((availablePositions.flat().filter(Boolean).length / availablePositions.flat().length) * 100).toFixed(1)}%)
+                    </p>
+                  )}
+                  <p>
+                    Words placed: {placedWords.length} / {words.length}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
@@ -128,13 +236,8 @@ export function WordSearchGrid({ className }: WordSearchGridProps) {
                     <div
                       key={colIndex}
                       className={`
-                        flex items-center justify-center border border-gray-200 font-bold
-                        ${cell.isWordLetter 
-                          ? 'bg-purple-100 text-purple-800' 
-                          : cell.letter 
-                            ? 'bg-gray-50 text-gray-600' 
-                            : 'bg-white'
-                        }
+                        flex items-center justify-center border font-bold
+                        ${getCellStyling(cell, rowIndex, colIndex)}
                       `}
                       style={{
                         width: `${cellSize}px`,
