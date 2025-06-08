@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { initializeModel, processImageFromDataURL, getModelInfo } from './process';
 
 interface CropArea {
   x: number;
@@ -12,6 +13,11 @@ interface ImageProcessingState {
   originalImage: string | null;
   originalImageFile: File | null;
   
+  // Background removed image
+  backgroundRemovedImage: string | null;
+  isBackgroundRemovalEnabled: boolean;
+  isInitializingBgRemoval: boolean;
+  
   // Cropped image
   croppedImage: string | null;
   cropArea: CropArea | null;
@@ -23,11 +29,16 @@ interface ImageProcessingState {
   
   // UI state
   isProcessing: boolean;
-  step: 'upload' | 'crop' | 'threshold' | 'complete';
+  step: 'upload' | 'bg-removal' | 'crop' | 'threshold' | 'complete';
+  error: string | null;
 }
 
 interface ImageProcessingActions {
   setOriginalImage: (imageUrl: string, file: File) => void;
+  setBackgroundRemovalEnabled: (enabled: boolean) => void;
+  processBackgroundRemoval: () => Promise<void>;
+  skipBackgroundRemoval: () => void;
+  setBackgroundRemovedImage: (imageUrl: string) => void;
   setCropArea: (area: CropArea) => void;
   setCroppedImage: (imageUrl: string) => void;
   setThresholdValue: (value: number) => void;
@@ -36,6 +47,7 @@ interface ImageProcessingActions {
   confirmThresholdImage: () => void;
   setStep: (step: ImageProcessingState['step']) => void;
   setProcessing: (processing: boolean) => void;
+  setError: (error: string | null) => void;
   reset: () => void;
   processThreshold: () => Promise<void>;
 }
@@ -47,13 +59,17 @@ interface ImageProcessingStore extends ImageProcessingState {
 const initialState: ImageProcessingState = {
   originalImage: null,
   originalImageFile: null,
+  backgroundRemovedImage: null,
+  isBackgroundRemovalEnabled: false,
+  isInitializingBgRemoval: false,
   croppedImage: null,
   cropArea: null,
   thresholdImage: null,
   previewThresholdImage: null,
   thresholdValue: 128,
   isProcessing: false,
-  step: 'upload'
+  step: 'upload',
+  error: null
 };
 
 export const useImageStore = create<ImageProcessingStore>((set, get) => ({
@@ -64,8 +80,65 @@ export const useImageStore = create<ImageProcessingStore>((set, get) => ({
       set({
         originalImage: imageUrl,
         originalImageFile: file,
+        step: 'bg-removal',
+        error: null
+      });
+    },
+    
+    setBackgroundRemovalEnabled: (enabled: boolean) => {
+      set({ isBackgroundRemovalEnabled: enabled });
+    },
+    
+    processBackgroundRemoval: async () => {
+      const { originalImage } = get();
+      if (!originalImage) {
+        console.log('❌ No original image, aborting background removal');
+        return;
+      }
+      
+      console.log('🚀 Starting background removal...');
+      set({ isProcessing: true, isInitializingBgRemoval: true, error: null });
+      
+      try {
+        // Initialize the background removal model
+        console.log('⚙️ Initializing background removal model...');
+        const initialized = await initializeModel("briaai/RMBG-1.4");
+        if (!initialized) {
+          throw new Error('Failed to initialize background removal model');
+        }
+        
+        set({ isInitializingBgRemoval: false });
+        console.log('✅ Model initialized, processing image...');
+        
+        // Process the image
+        const processedImageUrl = await processImageFromDataURL(originalImage);
+        
+        console.log('✅ Background removal completed successfully');
+        set({
+          backgroundRemovedImage: processedImageUrl,
+          isProcessing: false,
+          step: 'crop'
+        });
+      } catch (error) {
+        console.error('❌ Error during background removal:', error);
+        set({
+          isProcessing: false,
+          isInitializingBgRemoval: false,
+          error: error instanceof Error ? error.message : 'Failed to remove background'
+        });
+      }
+    },
+    
+    skipBackgroundRemoval: () => {
+      console.log('⏭️ Skipping background removal');
+      set({
+        backgroundRemovedImage: null,
         step: 'crop'
       });
+    },
+    
+    setBackgroundRemovedImage: (imageUrl: string) => {
+      set({ backgroundRemovedImage: imageUrl });
     },
     
     setCropArea: (area: CropArea) => {
@@ -112,6 +185,10 @@ export const useImageStore = create<ImageProcessingStore>((set, get) => ({
     
     setProcessing: (processing: boolean) => {
       set({ isProcessing: processing });
+    },
+    
+    setError: (error: string | null) => {
+      set({ error });
     },
     
     reset: () => {

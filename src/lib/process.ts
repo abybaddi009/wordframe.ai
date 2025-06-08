@@ -71,13 +71,9 @@ async function initializeWebGPU() {
 
     // Initialize model with WebGPU
     state.model = await AutoModel.from_pretrained(WEBGPU_MODEL_ID, {
-      device: "webgpu",
-      config: {
-        model_type: 'modnet',
-        architectures: ['MODNet']
-      }
+      device: "webgpu"
     });
-    state.processor = await AutoProcessor.from_pretrained(WEBGPU_MODEL_ID);
+    state.processor = await AutoProcessor.from_pretrained(WEBGPU_MODEL_ID, {});
     state.isWebGPUSupported = true;
     return true;
   } catch (error) {
@@ -97,9 +93,7 @@ export async function initializeModel(forceModelId?: string): Promise<boolean> {
         env.backends.onnx.wasm.proxy = true;
       }
 
-      state.model = await AutoModel.from_pretrained(FALLBACK_MODEL_ID, {
-        config: { model_type: 'custom' }
-      });
+      state.model = await AutoModel.from_pretrained(FALLBACK_MODEL_ID);
 
       state.processor = await AutoProcessor.from_pretrained(FALLBACK_MODEL_ID, {
         config: {
@@ -140,8 +134,8 @@ export async function initializeModel(forceModelId?: string): Promise<boolean> {
     }
     
     state.model = await AutoModel.from_pretrained(FALLBACK_MODEL_ID, {
-      progress_callback: (progress) => {
-        console.log(`Loading model: ${Math.round(progress * 100)}%`);
+      progress_callback: (progress: any) => {
+        console.log(`Loading model: ${Math.round((progress as number) * 100)}%`);
       }
     });
     
@@ -220,10 +214,19 @@ export async function processImage(image: File): Promise<File> {
     // Draw original image output to canvas
     ctx.drawImage(img.toCanvas(), 0, 0);
 
-    // Update alpha channel
+    // Update alpha channel and set background to white
     const pixelData = ctx.getImageData(0, 0, img.width, img.height);
     for (let i = 0; i < maskData.length; ++i) {
-      pixelData.data[4 * i + 3] = maskData[i];
+      const alpha = maskData[i];
+      pixelData.data[4 * i + 3] = 255; // Keep alpha at 255 (fully opaque)
+      
+      // If the mask indicates background (low alpha), set pixel to white
+      if (alpha < 128) { // Background pixel
+        pixelData.data[4 * i] = 255;     // R = white
+        pixelData.data[4 * i + 1] = 255; // G = white
+        pixelData.data[4 * i + 2] = 255; // B = white
+      }
+      // Otherwise keep the original pixel color (foreground)
     }
     ctx.putImageData(pixelData, 0, 0);
     
@@ -236,7 +239,7 @@ export async function processImage(image: File): Promise<File> {
     );
     
     const [fileName] = image.name.split(".");
-    const processedFile = new File([blob], `${fileName}-bg-blasted.png`, { type: "image/png" });
+    const processedFile = new File([blob], `${fileName}-bg-removed.png`, { type: "image/png" });
     return processedFile;
   } catch (error) {
     console.error("Error processing image:", error);
@@ -260,4 +263,61 @@ export async function processImages(images: File[]): Promise<File[]> {
   
   console.log("Processing images done");
   return processedFiles;
+}
+
+// Helper function to process image from URL (for data URLs)
+export async function processImageFromDataURL(dataURL: string): Promise<string> {
+  if (!state.model || !state.processor) {
+    throw new Error("Model not initialized. Call initializeModel() first.");
+  }
+
+  const img = await RawImage.fromURL(dataURL);
+  
+  try {
+    // Pre-process image
+    const { pixel_values } = await state.processor(img);
+    
+    // Predict alpha matte
+    const { output } = await state.model({ input: pixel_values });
+
+    // Resize mask back to original size
+    const maskData = (
+      await RawImage.fromTensor(output[0].mul(255).to("uint8")).resize(
+        img.width,
+        img.height,
+      )
+    ).data;
+
+    // Create new canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    if(!ctx) throw new Error("Could not get 2d context");
+    
+    // Draw original image output to canvas
+    ctx.drawImage(img.toCanvas(), 0, 0);
+
+    // Update alpha channel and set background to white
+    const pixelData = ctx.getImageData(0, 0, img.width, img.height);
+    for (let i = 0; i < maskData.length; ++i) {
+      const alpha = maskData[i];
+      pixelData.data[4 * i + 3] = 255; // Keep alpha at 255 (fully opaque)
+      
+      // If the mask indicates background (low alpha), set pixel to white
+      if (alpha < 128) { // Background pixel
+        pixelData.data[4 * i] = 255;     // R = white
+        pixelData.data[4 * i + 1] = 255; // G = white
+        pixelData.data[4 * i + 2] = 255; // B = white
+      }
+      // Otherwise keep the original pixel color (foreground)
+    }
+    ctx.putImageData(pixelData, 0, 0);
+    
+    // Convert canvas to data URL
+    return canvas.toDataURL('image/png');
+  } catch (error) {
+    console.error("Error processing image:", error);
+    throw new Error("Failed to process image");
+  }
 }

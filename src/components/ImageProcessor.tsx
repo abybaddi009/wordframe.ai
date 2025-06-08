@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
-import { Upload, ImageIcon, Crop as CropIcon, Sliders, Check, X, ArrowLeft } from 'lucide-react';
+import { Upload, ImageIcon, Crop as CropIcon, Sliders, Check, X, ArrowLeft, Scissors } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Slider } from './ui/slider';
@@ -21,12 +21,16 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
   
   const {
     originalImage,
+    backgroundRemovedImage,
+    isBackgroundRemovalEnabled,
+    isInitializingBgRemoval,
     croppedImage,
     thresholdImage,
     previewThresholdImage,
     thresholdValue,
     isProcessing,
     step,
+    error,
     actions
   } = useImageStore();
 
@@ -108,8 +112,11 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
 
   const handleBack = useCallback(() => {
     switch (step) {
-      case 'crop':
+      case 'bg-removal':
         actions.setStep('upload');
+        break;
+      case 'crop':
+        actions.setStep('bg-removal');
         break;
       case 'threshold':
         actions.setStep('crop');
@@ -167,6 +174,9 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
     }
   }, [step, thresholdValue, previewThresholdImage, isProcessing, croppedImage]);
 
+  // Determine the image to use for cropping
+  const imageForCropping = backgroundRemovedImage || originalImage;
+
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -178,12 +188,14 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
           )}
           <div className="flex items-center space-x-2">
             {step === 'upload' && <Upload className="w-5 h-5 text-purple-600" />}
+            {step === 'bg-removal' && <Scissors className="w-5 h-5 text-purple-600" />}
             {step === 'crop' && <CropIcon className="w-5 h-5 text-purple-600" />}
             {step === 'threshold' && <Sliders className="w-5 h-5 text-purple-600" />}
             {step === 'complete' && <Check className="w-5 h-5 text-green-600" />}
             
             <CardTitle className="text-lg">
               {step === 'upload' && 'Upload Image'}
+              {step === 'bg-removal' && 'Background Removal'}
               {step === 'crop' && 'Crop Image'}
               {step === 'threshold' && 'Adjust Threshold'}
               {step === 'complete' && 'Image Ready'}
@@ -220,8 +232,90 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
           </div>
         )}
 
+        {/* Background Removal Step */}
+        {step === 'bg-removal' && originalImage && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-sm font-medium mb-2">Original Image</h4>
+                <img
+                  src={originalImage}
+                  alt="Original"
+                  className="w-full h-48 object-contain border rounded"
+                />
+              </div>
+              <div>
+                <h4 className="text-sm font-medium mb-2">Background Removed</h4>
+                <div className="w-full h-48 border rounded flex items-center justify-center bg-gray-50 bg-[radial-gradient(circle_at_center,_transparent_1px,_#e5e7eb_1px)] bg-[length:10px_10px]">
+                  {isProcessing ? (
+                    <div className="flex flex-col items-center space-y-2">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
+                      <div className="text-sm text-gray-600">
+                        {isInitializingBgRemoval ? 'Loading model...' : 'Removing background...'}
+                      </div>
+                    </div>
+                  ) : backgroundRemovedImage ? (
+                    <img
+                      src={backgroundRemovedImage}
+                      alt="Background removed"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : error ? (
+                    <div className="text-center p-4">
+                      <div className="text-red-600 text-sm font-medium mb-2">
+                        {error}
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          actions.setError(null);
+                          actions.processBackgroundRemoval();
+                        }}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        Try Again
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">Click process to remove background</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-between">
+              <Button 
+                variant="outline" 
+                onClick={actions.skipBackgroundRemoval}
+                disabled={isProcessing}
+              >
+                Skip Background Removal
+              </Button>
+              <div className="space-x-2">
+                {backgroundRemovedImage ? (
+                  <Button 
+                    onClick={() => actions.setStep('crop')}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    Continue to Crop
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={actions.processBackgroundRemoval}
+                    disabled={isProcessing}
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    <Scissors className="w-4 h-4 mr-2" />
+                    Remove Background
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Crop Step */}
-        {step === 'crop' && originalImage && (
+        {step === 'crop' && imageForCropping && (
           <div className="space-y-4">
             <div className="flex justify-center">
                 <ReactCrop
@@ -233,14 +327,14 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
                >
                 <img
                   ref={imgRef}
-                  src={originalImage}
+                  src={imageForCropping}
                   alt="Crop preview"
                   className="max-w-full max-h-96 object-contain"
                 />
               </ReactCrop>
             </div>
             <div className="flex justify-end space-x-2">
-              <Button variant="secondary" className="text-white" onClick={() => actions.setStep('upload')}>
+              <Button variant="secondary" className="text-white" onClick={() => actions.setStep('bg-removal')}>
                 Back
               </Button>
               <Button 

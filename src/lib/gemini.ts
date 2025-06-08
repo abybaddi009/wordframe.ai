@@ -62,16 +62,15 @@ export const useGeminiStore = create<GeminiStore>((set, get) => ({
       // Generate random words with appropriate length for word search
       const randomWords = generate({ 
         exactly: count, 
-        minLength: 4, 
+        minLength: 3, 
         maxLength: 12 
       }) as string[]
       
       // Get hints for the generated words
-      const wordsWithHints = await actions.generateHintsForWords(randomWords)
+      // const wordsWithHints = await actions.generateHintsForWords(randomWords)
       
       set({ isLoading: false })
-      return wordsWithHints
-      
+      return randomWords.map(word => ({ word, hint: '' }))
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate words'
       set({ error: errorMessage, isLoading: false })
