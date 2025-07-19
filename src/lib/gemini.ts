@@ -18,6 +18,7 @@ interface GeminiStore {
   actions: {
     initializeGemini: (apiKey: string) => Promise<void>
     generateWords: (count: number, theme?: string) => Promise<WordWithHint[]>
+    generateWordsOfLength: (count: number, length: number) => Promise<WordWithHint[]>
     generateWordsFromBase: (baseWords: string[], count: number) => Promise<WordWithHint[]>
     generateHintsForWords: (words: string[]) => Promise<WordWithHint[]>
     clearError: () => void
@@ -70,9 +71,52 @@ export const useGeminiStore = create<GeminiStore>((set, get) => ({
       // const wordsWithHints = await actions.generateHintsForWords(randomWords)
       
       set({ isLoading: false })
-      return randomWords.map(word => ({ word, hint: '' }))
+      return randomWords.map(word => ({ word: word.toUpperCase(), hint: '' }))
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate words'
+      set({ error: errorMessage, isLoading: false })
+      throw new Error(errorMessage)
+    }
+  },
+
+  // Generate n words of specific length using random-words
+  generateWordsOfLength: async (count: number, length: number) => {
+    try {
+      set({ isLoading: true, error: null })
+      
+      // Generate words of specific length, with some flexibility for better results
+      const minLength = Math.max(3, length - 1); // At least 3, but allow 1 shorter
+      const maxLength = length + 1; // Allow 1 longer
+      
+      // Generate more words than needed to filter to exact length
+      const randomWords = generate({ 
+        exactly: count * 3, // Generate 3x to have good selection
+        minLength, 
+        maxLength 
+      }) as string[]
+      
+      // Filter to exact length and take only what we need
+      const exactLengthWords = randomWords
+        .filter(word => word.length === length)
+        .slice(0, count);
+      
+      // If we don't have enough exact length words, pad with close lengths
+      if (exactLengthWords.length < count) {
+        const closeWords = randomWords
+          .filter(word => word.length >= minLength && word.length <= maxLength)
+          .filter(word => !exactLengthWords.includes(word))
+          .slice(0, count - exactLengthWords.length);
+        
+        exactLengthWords.push(...closeWords);
+      }
+      
+      set({ isLoading: false })
+      return exactLengthWords.map(word => ({ 
+        word: word.toUpperCase(), 
+        hint: `${word.length}-letter word` 
+      }))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate words of specific length'
       set({ error: errorMessage, isLoading: false })
       throw new Error(errorMessage)
     }

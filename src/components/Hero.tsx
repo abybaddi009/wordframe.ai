@@ -1,11 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Camera, Sparkles, Upload, ArrowRight, ChevronDown } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface HeroProps {
   scrollY: number;
 }
 
 export function Hero({ scrollY }: HeroProps) {
+  const scrollToGallery = () => {
+    const galleryElement = document.getElementById('gallery');
+    if (galleryElement) {
+      galleryElement.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <section id="home" className="relative h-screen flex items-center justify-center overflow-hidden">
       {/* Parallax Background */}
@@ -32,12 +40,14 @@ export function Hero({ scrollY }: HeroProps) {
           ASCII art meets word games in the most creative way possible.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button size="lg" variant="secondary" className=" text-white text-lg px-8 py-4">
-            <Upload className="w-5 h-5 mr-2" />
-            <span>Create Your Puzzle</span>
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
-          <Button size="lg" variant="ghost">
+          <Link to="/builder">
+            <Button size="lg" variant="secondary" className=" text-white text-lg px-8 py-4">
+              <Upload className="w-5 h-5 mr-2" />
+              <span>Create Your Puzzle</span>
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          </Link>
+          <Button size="lg" variant="outline" onClick={scrollToGallery}>
             <Camera className="w-5 h-5 mr-2" />
             <span>See the gallery</span>
           </Button>

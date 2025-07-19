@@ -82,8 +82,8 @@ export function PuzzleBuilder() {
       
       // Convert to WordWithHint format and update word search store
       const wordsWithHints: WordWithHint[] = newWords.map(w => ({
-        word: w,
-        hint: `Find the word: ${w.toLowerCase()}`
+        word: w.toUpperCase(),
+        hint: `Find the word: ${w.toUpperCase()}`
       }));
       wordSearchActions.setWords(wordsWithHints);
       
@@ -99,7 +99,7 @@ export function PuzzleBuilder() {
       
       // Update word search store with all words including hints
       const allWordsWithHints: WordWithHint[] = [
-        ...words.map(w => ({ word: w, hint: `Find the word: ${w.toLowerCase()}` })),
+        ...words.map(w => ({ word: w.toUpperCase(), hint: `Find the word: ${w.toUpperCase()}` })),
         ...generatedWords
       ];
       wordSearchActions.setWords(allWordsWithHints);
@@ -121,8 +121,8 @@ export function PuzzleBuilder() {
     
     // Update word search store
     const wordsWithHints: WordWithHint[] = newWords.map(w => ({
-      word: w,
-      hint: `Find the word: ${w.toLowerCase()}`
+      word: w.toUpperCase(),
+      hint: `Find the word: ${w.toUpperCase()}`
     }));
     wordSearchActions.setWords(wordsWithHints);
   };

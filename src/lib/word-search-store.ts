@@ -52,7 +52,7 @@ interface WordSearchStore extends WordSearchState {
 }
 
 const initialState: WordSearchState = {
-  charactersPerMm: 2.5,
+  charactersPerMm: 7,
   gridWidth: 0,
   gridHeight: 0,
   words: [],
@@ -503,7 +503,7 @@ function calculateOverlap(
     }
     
     // Count overlapping letters
-    if (grid[row][col].letter && grid[row][col].letter === word[i]) {
+    if (grid[row][col].letter && grid[row][col].letter === word[i].toUpperCase()) {
       overlap++;
     }
   }
@@ -541,8 +541,8 @@ function placeWordInGrid(
     
     // Only place the letter if the position is empty OR if it matches (overlap)
     const existingLetter = grid[row][col].letter;
-    if (!existingLetter || existingLetter === word.word[i]) {
-      grid[row][col].letter = word.word[i];
+    if (!existingLetter || existingLetter === word.word[i].toUpperCase()) {
+      grid[row][col].letter = word.word[i].toUpperCase();
       grid[row][col].isWordLetter = true;
       // Add word ID to track which words use this cell (for overlaps)
       if (!grid[row][col].wordIds.includes(word.word.length)) { // Using word length as rough ID
@@ -597,19 +597,12 @@ function canPlaceWord(
     
     // FIXED: Check if position is already occupied by a different letter (proper overlap validation)
     const existingLetter = grid[row][col].letter;
-    if (existingLetter && existingLetter !== word[i]) {
+    if (existingLetter && existingLetter !== word[i].toUpperCase()) {
       return false; // Cannot place - letters don't match
     }
   }
   
   return true;
-}
-
-interface ContiguousLength {
-  horizontal: number;
-  vertical: number;
-  diagonalDown: number;
-  diagonalUp: number;
 }
 
 async function newPlacementAlgorithmWithUpdates(
@@ -619,439 +612,258 @@ async function newPlacementAlgorithmWithUpdates(
   set: any,
   totalAvailableSpaces: number
 ): Promise<WordSearchWord[]> {
-  console.log('🆕 Starting new placement algorithm with visual updates...');
+  console.log('🆕 Starting simplified placement algorithm...');
   
-  const allWords = [...words];
-  const visitedPositions = new Set<string>();
+  let allWords = [...words];
   
-  // Sort words by length (smallest first for the length check)
-  const sortedWords = [...words].sort((a, b) => a.word.length - b.word.length);
-  const smallestWordLength = sortedWords[0]?.word.length || 1;
+  // Phase 1: Place any existing words first
+  console.log('📍 Phase 1: Placing existing words...');
+  allWords = await placeExistingWordsSystematically(grid, allWords, availablePositions, set);
   
-  // Find the first available position as starting point
-  let currentRow = 0;
-  let currentCol = 0;
-  let foundStart = false;
+  // Phase 2: Simple iterative word generation and placement
+  console.log('🔤 Phase 2: Iterative word generation and placement...');
+  allWords = await simpleIterativeWordPlacement(grid, allWords, availablePositions, set, totalAvailableSpaces);
   
-  for (let row = 0; row < grid.length && !foundStart; row++) {
-    for (let col = 0; col < grid[0].length && !foundStart; col++) {
-      if (availablePositions[row][col] && !grid[row][col].letter) {
-        currentRow = row;
-        currentCol = col;
-        foundStart = true;
-      }
-    }
-  }
-  
-  console.log('📊 Starting position:', { currentRow, currentCol });
-  let currentOrientation: 'horizontal' | 'vertical' | 'diagonal' = 'horizontal';
-  
-  let placedCount = allWords.filter(w => w.placed).length; // Count already placed words
-  let processedWords = 0;
-  
-  while (processedWords < allWords.length) {
-    const positionKey = `${currentRow},${currentCol}`;
-    
-    // Skip if already visited this position
-    if (visitedPositions.has(positionKey)) {
-      const nextPosition = findNearestEmptyNeighbor(currentRow, currentCol, grid, availablePositions, visitedPositions);
-      if (!nextPosition) break;
-      currentRow = nextPosition.row;
-      currentCol = nextPosition.col;
-      continue;
-    }
-    
-    visitedPositions.add(positionKey);
-    
-    // Step 2: Find max contiguous lengths in 4 directions
-    const lengths = findContiguousLengths(currentRow, currentCol, grid, availablePositions);
-    
-    console.log(`📏 At position (${currentRow}, ${currentCol}), contiguous lengths:`, lengths);
-    
-    // Step 6: Check if any direction can fit the smallest word
-    const maxLength = Math.max(lengths.horizontal, lengths.vertical, lengths.diagonalDown, lengths.diagonalUp);
-    if (maxLength < smallestWordLength) {
-      if (maxLength < 3) {
-        console.log('🎯 Max contiguous length < 3, filling with random letters');
-        await floodFillWithRandomLetters(grid, currentRow, currentCol, availablePositions);
-      }
-      console.log(`❌ Max contiguous length ${maxLength} < smallest word ${smallestWordLength}, stopping`);
-      break;
-    }
-    
-    // Step 3: Find words that fit the available lengths
-    const remainingWords = allWords.filter(w => !w.placed);
-    
-    const suitableWords = findSuitableWords(remainingWords, lengths);
-    
-    if (suitableWords.length === 0) {
-      // No suitable words found, check if we should generate one
-      const placedCharacters = allWords.filter(w => w.placed).reduce((sum, w) => sum + w.word.length, 0);
-      const targetCharacters = Math.floor(totalAvailableSpaces * 0.4);
-      
-      if (placedCharacters < targetCharacters && maxLength >= 3) {
-        // Generate a word that fits the available space
-        const idealLength = Math.min(maxLength, 8); // Cap at 8 characters for readability
-        
-        try {
-          console.log(`🔤 Generating word of length ${idealLength} for position (${currentRow}, ${currentCol})`);
-          set((state: any) => ({
-            ...state,
-            generationStep: `Generating word (length ${idealLength})...`
-          }));
-          
-          const geminiStore = useGeminiStore.getState();
-          const newWords = await geminiStore.actions.generateWords(1);
-          
-          if (newWords.length > 0) {
-            // Find a word that fits, or use the first one and truncate if necessary
-            let selectedWord = newWords[0];
-            if (selectedWord.word.length > idealLength) {
-              // Truncate the word to fit
-              selectedWord = {
-                ...selectedWord,
-                word: selectedWord.word.substring(0, idealLength).toUpperCase()
-              };
-            }
-            
-            const newWordSearchWord: WordSearchWord = {
-              ...selectedWord,
-              placed: false,
-              startRow: 0,
-              startCol: 0,
-              direction: 'horizontal'
-            };
-            
-            // Add the new word to our words array
-            allWords.push(newWordSearchWord);
-            
-            console.log(`✅ Generated and added word: "${newWordSearchWord.word}"`);
-            
-            // Try to place this new word immediately
-            const direction = getBestDirectionForWord(newWordSearchWord, lengths, currentOrientation);
-            
-            if (canPlaceWord(newWordSearchWord.word, currentRow, currentCol, direction, grid, availablePositions)) {
-              // Place the word
-              placeWordInGrid(
-                newWordSearchWord, 
-                { row: currentRow, col: currentCol }, 
-                direction, 
-                grid
-              );
-              
-              newWordSearchWord.placed = true;
-              newWordSearchWord.startRow = currentRow;
-              newWordSearchWord.startCol = currentCol;
-              newWordSearchWord.direction = direction;
-              
-              placedCount++;
-              console.log(`✅ Placed generated word "${newWordSearchWord.word}" at (${currentRow}, ${currentCol}) ${direction}`);
-              
-              // Update the grid state to show the new word
-              set((state: any) => ({
-                ...state,
-                grid: [...grid.map(row => [...row])],
-                words: [...allWords],
-                generationStep: `Placing words... (${placedCount}/${allWords.length})`
-              }));
-              
-              // Small delay to show each word placement
-              await new Promise(resolve => setTimeout(resolve, 300));
-              
-              // Change orientation for next word
-              currentOrientation = getNextOrientation(currentOrientation);
-            } else {
-              console.log(`❌ Could not place generated word "${newWordSearchWord.word}" at (${currentRow}, ${currentCol})`);
-            }
-          }
-        } catch (error) {
-          console.log('⚠️ Failed to generate word, moving to next position');
-        }
-      }
-      
-      // Move to next position (whether we generated a word or not)
-      const nextPosition = findNearestEmptyNeighbor(currentRow, currentCol, grid, availablePositions, visitedPositions);
-      if (!nextPosition) break;
-      currentRow = nextPosition.row;
-      currentCol = nextPosition.col;
-      continue;
-    }
-    
-    // Step 4: Place the biggest suitable word
-    const biggestWord = suitableWords[0]; // Already sorted by length desc in findSuitableWords
-    const direction = getBestDirectionForWord(biggestWord, lengths, currentOrientation);
-    
-    if (canPlaceWord(biggestWord.word, currentRow, currentCol, direction, grid, availablePositions)) {
-      // Place the word
-      placeWordInGrid(
-        biggestWord, 
-        { row: currentRow, col: currentCol }, 
-        direction, 
-        grid
-      );
-      
-      biggestWord.placed = true;
-      biggestWord.startRow = currentRow;
-      biggestWord.startCol = currentCol;
-      biggestWord.direction = direction;
-      
-      placedCount++;
-      console.log(`✅ Placed "${biggestWord.word}" at (${currentRow}, ${currentCol}) ${direction}`);
-      
-      // Update the grid state to show the new word - Visual Update
-      set((state: any) => ({
-        ...state,
-        grid: [...grid.map(row => [...row])], // Create deep copy
-        words: [...allWords],
-        generationStep: `Placing words... (${placedCount}/${allWords.length})`
-      }));
-      
-      // Small delay to show each word placement
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Change orientation for next word
-      currentOrientation = getNextOrientation(currentOrientation);
-    } else {
-      console.log(`❌ Could not place "${biggestWord.word}" at (${currentRow}, ${currentCol})`);
-    }
-    
-    processedWords++;
-    
-    // Step 5: Move to nearest empty neighbor
-    const nextPosition = findNearestEmptyNeighbor(currentRow, currentCol, grid, availablePositions, visitedPositions);
-    if (!nextPosition) break;
-    currentRow = nextPosition.row;
-    currentCol = nextPosition.col;
-  }
+  // Phase 3: Fill remaining spaces with random letters
+  console.log('🎲 Phase 3: Filling remaining spaces with random letters...');
+  await fillRemainingSpacesWithRandomLetters(grid, availablePositions, set);
   
   const finalPlacedCount = allWords.filter(w => w.placed).length;
-  console.log(`📊 New algorithm results: ${finalPlacedCount}/${allWords.length} words placed`);
+  console.log(`✅ Simplified algorithm results: ${finalPlacedCount}/${allWords.length} words placed`);
   
   return allWords;
 }
 
-function findContiguousLengths(
-  row: number,
-  col: number,
+// New simplified iterative approach
+async function simpleIterativeWordPlacement(
   grid: GridCell[][],
-  availablePositions: boolean[][]
-): ContiguousLength {
-  const gridHeight = grid.length;
-  const gridWidth = grid[0].length;
-  
-  const lengths: ContiguousLength = {
-    horizontal: 0,
-    vertical: 0,
-    diagonalDown: 0,
-    diagonalUp: 0
-  };
-  
-  // Check horizontal (left to right from current position)
-  for (let c = col; c < gridWidth; c++) {
-    if (availablePositions[row][c] && !grid[row][c].letter) {
-      lengths.horizontal++;
-    } else {
-      break;
-    }
-  }
-  
-  // Check vertical (top to bottom from current position)
-  for (let r = row; r < gridHeight; r++) {
-    if (availablePositions[r][col] && !grid[r][col].letter) {
-      lengths.vertical++;
-    } else {
-      break;
-    }
-  }
-  
-  // Check diagonal down (down-right from current position)
-  for (let i = 0; row + i < gridHeight && col + i < gridWidth; i++) {
-    if (availablePositions[row + i][col + i] && !grid[row + i][col + i].letter) {
-      lengths.diagonalDown++;
-    } else {
-      break;
-    }
-  }
-  
-  // Check diagonal up (up-right from current position)
-  for (let i = 0; row - i >= 0 && col + i < gridWidth; i++) {
-    if (availablePositions[row - i][col + i] && !grid[row - i][col + i].letter) {
-      lengths.diagonalUp++;
-    } else {
-      break;
-    }
-  }
-  
-  return lengths;
-}
-
-function findSuitableWords(
   words: WordSearchWord[],
-  lengths: ContiguousLength,
-): WordSearchWord[] {
-  const suitable: WordSearchWord[] = [];
-  
-  for (const word of words) {
-    const wordLength = word.word.length;
-    let canFit = false;
-    
-    // Check if word fits in any direction
-    if (lengths.horizontal >= wordLength ||
-        lengths.vertical >= wordLength ||
-        lengths.diagonalDown >= wordLength ||
-        lengths.diagonalUp >= wordLength) {
-      canFit = true;
-    }
-    
-    if (canFit) {
-      suitable.push(word);
-    }
-  }
-  
-  // Sort by length (biggest first)
-  return suitable.sort((a, b) => b.word.length - a.word.length);
-}
-
-function getBestDirectionForWord(
-  word: WordSearchWord,
-  lengths: ContiguousLength,
-  preferredOrientation: 'horizontal' | 'vertical' | 'diagonal'
-): WordSearchWord['direction'] {
-  const wordLength = word.word.length;
-  
-  // Try preferred orientation first
-  if (preferredOrientation === 'horizontal' && lengths.horizontal >= wordLength) {
-    return 'horizontal';
-  }
-  if (preferredOrientation === 'vertical' && lengths.vertical >= wordLength) {
-    return 'vertical';
-  }
-  if (preferredOrientation === 'diagonal') {
-    if (lengths.diagonalDown >= wordLength) return 'diagonal-down';
-    if (lengths.diagonalUp >= wordLength) return 'diagonal-up';
-  }
-  
-  // Fall back to any available direction
-  if (lengths.horizontal >= wordLength) return 'horizontal';
-  if (lengths.vertical >= wordLength) return 'vertical';
-  if (lengths.diagonalDown >= wordLength) return 'diagonal-down';
-  if (lengths.diagonalUp >= wordLength) return 'diagonal-up';
-  
-  return 'horizontal'; // Default fallback
-}
-
-function getNextOrientation(current: 'horizontal' | 'vertical' | 'diagonal'): 'horizontal' | 'vertical' | 'diagonal' {
-  switch (current) {
-    case 'horizontal': return 'vertical';
-    case 'vertical': return 'diagonal';
-    case 'diagonal': return 'horizontal';
-  }
-}
-
-function findNearestEmptyNeighbor(
-  currentRow: number,
-  currentCol: number,
-  grid: GridCell[][],
   availablePositions: boolean[][],
-  visitedPositions: Set<string>
-): { row: number; col: number } | null {
-  const gridHeight = grid.length;
-  const gridWidth = grid[0].length;
-  const queue: Array<{ row: number; col: number; distance: number }> = [];
-  const visited = new Set<string>();
+  set: any,
+  totalAvailableSpaces: number
+): Promise<WordSearchWord[]> {
   
-  // Start BFS from current position
-  queue.push({ row: currentRow, col: currentCol, distance: 0 });
-  visited.add(`${currentRow},${currentCol}`);
+  const allWords = [...words];
+  let currentPlacedCharacters = allWords.filter(w => w.placed).reduce((sum, w) => sum + w.word.length, 0);
+  let iterationCount = 0;
+  const maxIterations = 50; // Prevent infinite loops
   
-  const directions = [
-    [-1, 0], [1, 0], [0, -1], [0, 1], // Cardinal directions
-    [-1, -1], [-1, 1], [1, -1], [1, 1] // Diagonal directions
-  ];
+  console.log(`🎯 Starting iterative placement: ${currentPlacedCharacters}/${totalAvailableSpaces} characters`);
   
-  while (queue.length > 0) {
-    const { row, col, distance } = queue.shift()!;
+  while (currentPlacedCharacters < totalAvailableSpaces * 0.85 && iterationCount < maxIterations) {
+    iterationCount++;
     
-    // Skip current position
-    if (distance > 0) {
-      const posKey = `${row},${col}`;
-      if (availablePositions[row][col] && 
-          !grid[row][col].letter && 
-          !visitedPositions.has(posKey)) {
-        return { row, col };
-      }
-    }
+    // Calculate remaining space
+    const remainingSpaces = totalAvailableSpaces - currentPlacedCharacters;
+    console.log(`🔄 Iteration ${iterationCount}: ${remainingSpaces} spaces remaining`);
     
-    // Add neighbors to queue
-    for (const [dr, dc] of directions) {
-      const newRow = row + dr;
-      const newCol = col + dc;
-      const newKey = `${newRow},${newCol}`;
+    // Generate a batch of words of various lengths (3-8 characters)
+    const wordLengths = [3, 4, 5, 6, 7, 8];
+    const batchSize = 5;
+    let wordsPlacedThisIteration = 0;
+    
+    try {
+      set((state: any) => ({
+        ...state,
+        generationStep: `Iteration ${iterationCount}: Generating ${batchSize} words...`
+      }));
       
-      if (newRow >= 0 && newRow < gridHeight &&
-          newCol >= 0 && newCol < gridWidth &&
-          !visited.has(newKey)) {
-        visited.add(newKey);
-        queue.push({ row: newRow, col: newCol, distance: distance + 1 });
+      const geminiStore = useGeminiStore.getState();
+      const newWords = await geminiStore.actions.generateWords(batchSize);
+      
+      console.log(`📝 Generated ${newWords.length} words in iteration ${iterationCount}`);
+      
+      // Try to place each generated word
+      for (const wordData of newWords) {
+        if (wordData.word.length < 3) continue; // Skip short words
+        
+        // Find all valid positions for this word
+        const validPositions = findAllValidPositionsForWord(
+          wordData.word, 
+          grid, 
+          availablePositions
+        );
+        
+        if (validPositions.length > 0) {
+          // Pick a random valid position
+          const position = validPositions[Math.floor(Math.random() * validPositions.length)];
+          
+          // Create new word search word
+          const newWordSearchWord: WordSearchWord = {
+            ...wordData,
+            placed: true,
+            startRow: position.row,
+            startCol: position.col,
+            direction: position.direction
+          };
+          
+          // Place the word in grid
+          placeWordInGrid(newWordSearchWord, position, position.direction, grid);
+          
+          // Add to words array
+          allWords.push(newWordSearchWord);
+          wordsPlacedThisIteration++;
+          currentPlacedCharacters += newWordSearchWord.word.length;
+          
+          console.log(`✅ Placed "${newWordSearchWord.word}" (${newWordSearchWord.word.length} chars) at (${position.row}, ${position.col}) ${position.direction}`);
+          
+          // Update UI every few placements
+          if (wordsPlacedThisIteration % 2 === 0) {
+            set((state: any) => ({
+              ...state,
+              grid: [...grid.map(row => [...row])],
+              words: [...allWords],
+              generationStep: `Iteration ${iterationCount}: Placed ${wordsPlacedThisIteration} words (${currentPlacedCharacters}/${totalAvailableSpaces})`
+            }));
+            
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
       }
+      
+      console.log(`📊 Iteration ${iterationCount} complete: placed ${wordsPlacedThisIteration} words`);
+      
+      // If we couldn't place any words this iteration, we're likely done
+      if (wordsPlacedThisIteration === 0) {
+        console.log('🔚 No words placed this iteration, stopping...');
+        break;
+      }
+      
+      // Update UI after each iteration
+      set((state: any) => ({
+        ...state,
+        grid: [...grid.map(row => [...row])],
+        words: [...allWords],
+        generationStep: `Completed iteration ${iterationCount}: ${currentPlacedCharacters}/${totalAvailableSpaces} characters`
+      }));
+      
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+    } catch (error) {
+      console.log(`⚠️ Error in iteration ${iterationCount}:`, error);
+      break;
     }
   }
   
-  return null; // No empty neighbors found
+  const finalPlacedWords = allWords.filter(w => w.placed).length;
+  const fillPercentage = ((currentPlacedCharacters / totalAvailableSpaces) * 100).toFixed(1);
+  
+  console.log(`🎯 Final results: ${finalPlacedWords} words placed, ${currentPlacedCharacters}/${totalAvailableSpaces} characters (${fillPercentage}%)`);
+  
+  return allWords;
 }
 
-const floodFillWithRandomLetters = async (
-  grid: GridCell[][], 
-  row: number, 
-  col: number, 
-  availablePositions: boolean[][]
-) => {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const gridHeight = grid.length;
-  const gridWidth = grid[0].length;
+// Phase 1: Place existing words systematically
+async function placeExistingWordsSystematically(
+  grid: GridCell[][],
+  words: WordSearchWord[],
+  availablePositions: boolean[][],
+  set: any
+): Promise<WordSearchWord[]> {
   
-  const queue: Array<{ row: number; col: number }> = [];
-  const visited = new Set<string>();
+  // Sort words by length (longest first for better placement)
+  const sortedWords = [...words].sort((a, b) => b.word.length - a.word.length);
+  let placedCount = words.filter(w => w.placed).length; // Count already placed
   
-  // Start flood fill from the given position
-  queue.push({ row, col });
-  visited.add(`${row},${col}`);
-  
-  const directions = [
-    [-1, 0], [1, 0], [0, -1], [0, 1] // Cardinal directions only for flood fill
-  ];
-  
-  let filledCount = 0;
-  
-  while (queue.length > 0) {
-    const { row: currentRow, col: currentCol } = queue.shift()!;
+  for (const word of sortedWords) {
+    if (word.placed) continue;
     
-    // Fill current position if it's empty and available
-    if (availablePositions[currentRow][currentCol] && !grid[currentRow][currentCol].letter) {
-      grid[currentRow][currentCol].letter = letters[Math.floor(Math.random() * letters.length)];
-      filledCount++;
-      console.log(`🎲 Filled position (${currentRow}, ${currentCol}) with ${grid[currentRow][currentCol].letter}`);
-    }
+    // Find ALL valid positions for this word
+    const validPositions = findAllValidPositionsForWord(
+      word.word, 
+      grid, 
+      availablePositions
+    );
     
-    // Add neighboring positions to queue
-    for (const [dr, dc] of directions) {
-      const newRow = currentRow + dr;
-      const newCol = currentCol + dc;
-      const posKey = `${newRow},${newCol}`;
+    if (validPositions.length > 0) {
+      // Pick random position from valid ones
+      const position = validPositions[Math.floor(Math.random() * validPositions.length)];
       
-      // Check bounds and if position hasn't been visited
-      if (newRow >= 0 && newRow < gridHeight &&
-          newCol >= 0 && newCol < gridWidth &&
-          !visited.has(posKey)) {
-        
-        // Only add to queue if position is available and empty
-        if (availablePositions[newRow][newCol] && !grid[newRow][newCol].letter) {
-          visited.add(posKey);
-          queue.push({ row: newRow, col: newCol });
+      // Place the word
+      placeWordInGrid(word, position, position.direction, grid);
+      word.placed = true;
+      word.startRow = position.row;
+      word.startCol = position.col;
+      word.direction = position.direction;
+      
+      placedCount++;
+      console.log(`✅ Placed "${word.word}" at (${position.row}, ${position.col}) ${position.direction}`);
+      
+      // Update UI
+      set((state: any) => ({
+        ...state,
+        grid: [...grid.map(row => [...row])],
+        words: [...words],
+        generationStep: `Placing existing words... (${placedCount}/${words.length})`
+      }));
+      
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  
+  console.log(`📊 Placed ${placedCount - words.filter(w => w.placed).length} existing words`);
+  return words;
+}
+
+// Helper: Find all valid positions for a specific word
+function findAllValidPositionsForWord(
+  word: string,
+  grid: GridCell[][],
+  availablePositions: boolean[][]
+): Array<{ row: number; col: number; direction: WordSearchWord['direction'] }> {
+  
+  const positions: Array<{ row: number; col: number; direction: WordSearchWord['direction'] }> = [];
+  const directions: WordSearchWord['direction'][] = ['horizontal', 'vertical', 'diagonal-down', 'diagonal-up'];
+  
+  // Check every position in grid
+  for (let row = 0; row < grid.length; row++) {
+    for (let col = 0; col < grid[0].length; col++) {
+      for (const direction of directions) {
+        if (canPlaceWord(word, row, col, direction, grid, availablePositions)) {
+          positions.push({ row, col, direction });
         }
       }
     }
   }
   
-  console.log(`✅ Flood fill completed: filled ${filledCount} positions with random letters`);
+  return positions;
+}
+
+// Helper function to fill remaining spaces with random letters
+async function fillRemainingSpacesWithRandomLetters(grid: GridCell[][], availablePositions: boolean[][], set: any): Promise<void> {
+  console.log('🎲 Filling remaining spaces with random letters...');
+  
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let filledCount = 0;
+  
+  // Calculate only available positions that need filling
+  const positionsToFill: {row: number, col: number}[] = [];
+  for (let row = 0; row < grid.length; row++) {
+    for (let col = 0; col < grid[0].length; col++) {
+      if (availablePositions[row][col] && !grid[row][col].letter) {
+        positionsToFill.push({row, col});
+      }
+    }
+  }
+  
+  const totalToFill = positionsToFill.length;
+  console.log(`🎯 Found ${totalToFill} available positions to fill with random letters`);
+  
+  for (const {row, col} of positionsToFill) {
+    grid[row][col].letter = letters[Math.floor(Math.random() * letters.length)];
+    filledCount++;
+    
+    // Update state every 50 letters or at the end for visual effect
+    if (filledCount % 50 === 0 || filledCount === totalToFill) {
+      set((state: any) => ({
+        ...state,
+        grid: [...grid.map(row => [...row])],
+        generationStep: `Filling spaces... (${filledCount}/${totalToFill})`
+      }));
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  console.log(`✅ Filled ${filledCount} empty spaces with random letters`);
 }

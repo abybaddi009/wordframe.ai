@@ -3,7 +3,7 @@ import { useWordSearchStore } from '@/lib/word-search-store';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { Shuffle, RotateCcw, Loader2 } from 'lucide-react';
+import { Shuffle, RotateCcw, Loader2, Printer } from 'lucide-react';
 
 interface WordSearchGridProps {
   className?: string;
@@ -17,11 +17,168 @@ export function WordSearchGrid({ className }: WordSearchGridProps) {
     isGenerating, 
     generationStep, 
     error,
+    paperWidth,
+    paperHeight,
+    charactersPerMm,
     actions 
   } = useWordSearchStore();
 
   const placedWords = words.filter(word => word.placed);
   const unplacedWords = words.filter(word => !word.placed);
+
+  // Print functionality
+  const handlePrint = () => {
+    if (grid.length === 0) return;
+
+    // Calculate print dimensions
+    const gridCols = grid[0]?.length || 0;
+    const gridRows = grid.length;
+    
+    // Calculate optimal cell size for print based on paper size and character density
+    const availableWidth = paperWidth * 0.8; // Use 80% of paper width for margins
+    const availableHeight = paperHeight * 0.6; // Use 60% of paper height for grid (rest for word list)
+    
+    const cellWidthMm = availableWidth / gridCols;
+    const cellHeightMm = availableHeight / gridRows;
+    const cellSizeMm = Math.min(cellWidthMm, cellHeightMm, 6); // Max 6mm per cell
+    
+    // Create print content
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Word Search Puzzle</title>
+          <style>
+            @page {
+              size: ${paperWidth}mm ${paperHeight}mm;
+              margin: 10mm;
+            }
+            
+            @media print {
+              body { margin: 0; padding: 0; }
+              .no-print { display: none !important; }
+            }
+            
+            body {
+              font-family: 'Courier New', monospace;
+              font-size: 12px;
+              line-height: 1.2;
+              color: #000;
+              background: #fff;
+            }
+            
+            .puzzle-container {
+              width: 100%;
+              max-width: ${paperWidth - 20}mm;
+              margin: 0 auto;
+            }
+            
+            .puzzle-title {
+              text-align: center;
+              font-size: 18px;
+              font-weight: bold;
+              margin-bottom: 10mm;
+              font-family: Arial, sans-serif;
+            }
+            
+            .grid-container {
+              display: flex;
+              justify-content: center;
+              margin-bottom: 8mm;
+            }
+            
+            .grid {
+              border: 2px solid #000;
+              background: #fff;
+            }
+            
+            .grid-row {
+              display: flex;
+            }
+            
+            .grid-cell {
+              width: ${cellSizeMm}mm;
+              height: ${cellSizeMm}mm;
+              border: 1px solid #000;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: bold;
+              font-size: ${Math.max(6, cellSizeMm * 0.6)}px;
+              background: #fff;
+            }
+            
+            .word-list {
+              margin-top: 5mm;
+            }
+            
+            .word-list-title {
+              font-size: 14px;
+              font-weight: bold;
+              margin-bottom: 3mm;
+              font-family: Arial, sans-serif;
+            }
+            
+            .words-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+              gap: 2mm;
+              font-size: 11px;
+            }
+            
+            .word-item {
+              padding: 1mm;
+              border: 1px solid #ccc;
+              text-align: center;
+              background: #f8f8f8;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="puzzle-container">
+            <div class="puzzle-title">Word Search Puzzle</div>
+            
+            <div class="grid-container">
+              <div class="grid">
+                ${grid.map(row => `
+                  <div class="grid-row">
+                    ${row.map(cell => `
+                      <div class="grid-cell">${cell.letter || ''}</div>
+                    `).join('')}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            
+            ${placedWords.length > 0 ? `
+              <div class="word-list">
+                <div class="word-list-title">Find these words:</div>
+                <div class="words-grid">
+                  ${placedWords.map(word => `
+                    <div class="word-item">${word.word}</div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Open print window
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      // Trigger print dialog after content loads
+      printWindow.onload = () => {
+        printWindow.print();
+        printWindow.close();
+      };
+    }
+  };
 
   // Calculate appropriate cell size based on grid dimensions
   const getCellSize = () => {
@@ -197,6 +354,16 @@ export function WordSearchGrid({ className }: WordSearchGridProps) {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">Word Search Puzzle</CardTitle>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrint}
+              disabled={isGenerating || grid.length === 0}
+              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              Print
+            </Button>
             <Button
               variant="outline"
               size="sm"
