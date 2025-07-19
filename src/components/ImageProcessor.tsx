@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import { Upload, ImageIcon, Crop as CropIcon, Sliders, Check, X, ArrowLeft, Scissors } from 'lucide-react';
@@ -22,7 +22,6 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
   const {
     originalImage,
     backgroundRemovedImage,
-    isBackgroundRemovalEnabled,
     isInitializingBgRemoval,
     croppedImage,
     thresholdImage,
@@ -88,9 +87,7 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
     actions.setThresholdValue(value[0]);
   }, [actions]);
 
-  const handleThresholdComplete = useCallback(async () => {
-    await actions.processThreshold();
-  }, [actions]);
+
 
   const handleConfirm = useCallback(() => {
     console.log('🔄 handleConfirm triggered:', { 
@@ -320,7 +317,7 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
             <div className="flex justify-center">
                 <ReactCrop
                  crop={crop}
-                 onChange={(crop: Crop, percentCrop: Crop) => setCrop(percentCrop)}
+                 onChange={(_: Crop, percentCrop: Crop) => setCrop(percentCrop)}
                  onComplete={(c: PixelCrop) => setCompletedCrop(c)}
                  aspect={aspectRatio}
                  className="max-w-full max-h-96"

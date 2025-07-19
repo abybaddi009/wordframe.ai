@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { initializeModel, processImageFromDataURL, getModelInfo } from './process';
+import { initializeModel, processImageFromDataURL } from './process';
 
 interface CropArea {
   x: number;

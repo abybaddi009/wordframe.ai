@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { ArrowLeft, Grid3X3, Settings, Sparkles, X, Sliders } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -41,15 +41,14 @@ export function PuzzleBuilder() {
   const [showImageProcessor, setShowImageProcessor] = useState(false);
   const [showPuzzle, setShowPuzzle] = useState(false);
 
-  const { initializeGemini, generateWords, generateWordsFromBase, clearError } = useGeminiStore(state => state.actions);
+  const { initializeGemini, generateWords } = useGeminiStore(state => state.actions);
   const { thresholdImage, actions: imageActions } = useImageStore();
   const { 
     charactersPerMm, 
-    words: wordSearchWords, 
     actions: wordSearchActions 
   } = useWordSearchStore();
 
-  const { register, handleSubmit, watch, setValue, reset } = useForm<PuzzleBuilderForm>({
+  const { register, watch, setValue, reset } = useForm<PuzzleBuilderForm>({
     defaultValues: {
       currentWord: ''
     }
@@ -242,7 +241,7 @@ export function PuzzleBuilder() {
               {!thresholdImage || showImageProcessor ? (
                 <ImageProcessor
                   aspectRatio={aspectRatio}
-                  onComplete={(processedImage) => {
+                  onComplete={() => {
                     setShowImageProcessor(false);
                   }}
                   onCancel={() => {

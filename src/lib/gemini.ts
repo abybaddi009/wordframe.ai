@@ -54,8 +54,7 @@ export const useGeminiStore = create<GeminiStore>((set, get) => ({
   },
 
   // Generate n words with hints for word search using random-words
-  generateWords: async (count: number, theme?: string) => {
-    const { actions } = get()
+  generateWords: async (count: number, _?: string) => {
     
     try {
       set({ isLoading: true, error: null })

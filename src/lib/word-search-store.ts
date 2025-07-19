@@ -138,7 +138,7 @@ export const useWordSearchStore = create<WordSearchStore>((set, get) => ({
     },
     
     generatePuzzle: async (thresholdImage: string) => {
-      const { gridWidth, gridHeight, words, paperWidth, paperHeight } = get();
+      const { gridWidth, gridHeight, words } = get();
       
       console.log('🎮 Starting puzzle generation...');
       console.log('📊 Grid dimensions:', { gridWidth, gridHeight });
@@ -322,89 +322,7 @@ async function analyzeThresholdImage(imageUrl: string, gridWidth: number, gridHe
   });
 }
 
-// Helper function to place words in grid with visual updates
-async function placeWordsInGridWithUpdates(
-  grid: GridCell[][],
-  words: WordSearchWord[],
-  availablePositions: boolean[][],
-  set: any
-): Promise<WordSearchWord[]> {
-  console.log('🎯 Placing words in grid with visual updates...');
-  
-  const directions = ['horizontal', 'vertical', 'diagonal-down', 'diagonal-up'] as const;
-  const placedWords = [...words];
-  let placedCount = placedWords.filter(w => w.placed).length; // Count already placed words
-  let newlyPlacedCount = 0;
-  
-  // Only process words that haven't been placed yet
-  const unplacedWords = placedWords.filter(word => !word.placed);
-  console.log(`📊 Found ${unplacedWords.length} unplaced words out of ${placedWords.length} total`);
-  
-  // Sort unplaced words by length (longest first for better placement)
-  const sortedWords = [...unplacedWords].sort((a, b) => b.word.length - a.word.length);
-  
-  for (const word of sortedWords) {
-    let placed = false;
-    const allValidPositions: Array<{ row: number; col: number; overlap: number; direction: WordSearchWord['direction'] }> = [];
-    
-    // Find all valid positions for all directions
-    for (const direction of directions) {
-      const positions = findAllValidPositions(word.word, direction, grid, availablePositions);
-      positions.forEach(pos => allValidPositions.push({ ...pos, direction }));
-    }
-    
-    if (allValidPositions.length > 0) {
-      // Sort by overlap (prefer positions with more letter overlaps, but not excessive overlaps)
-      allValidPositions.sort((a, b) => {
-        // Prefer some overlap but not complete overlap (which indicates overwriting)
-        const aScore = Math.min(a.overlap, word.word.length - 1); // Cap overlap at word length - 1
-        const bScore = Math.min(b.overlap, word.word.length - 1);
-        return bScore - aScore;
-      });
-      
-      // Filter out positions that would completely overwrite existing letters
-      const validPositions = allValidPositions.filter(pos => {
-        return pos.overlap < word.word.length; // Don't allow complete overlap (overwriting)
-      });
-      
-      if (validPositions.length > 0) {
-        // Pick from the best positions (those with optimal overlap)
-        const bestOverlap = validPositions[0].overlap;
-        const bestPositions = validPositions.filter(pos => pos.overlap === bestOverlap);
-        const selectedPosition = bestPositions[Math.floor(Math.random() * bestPositions.length)];
-        
-        placeWordInGrid(word, selectedPosition, selectedPosition.direction, grid);
-        word.placed = true;
-        word.startRow = selectedPosition.row;
-        word.startCol = selectedPosition.col;
-        word.direction = selectedPosition.direction;
-        placed = true;
-        newlyPlacedCount++;
-        placedCount++;
-        
-        console.log(`✅ Placed "${word.word}" at (${selectedPosition.row}, ${selectedPosition.col}) ${selectedPosition.direction} with ${selectedPosition.overlap} overlaps`);
-        
-        // Update the grid state to show the new word
-        set((state: any) => ({
-          ...state,
-          grid: [...grid.map(row => [...row])], // Create deep copy
-          words: [...placedWords],
-          generationStep: `Placing words... (${placedCount}/${placedWords.length})`
-        }));
-        
-        // Small delay to show each word placement
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-    }
-    
-    if (!placed) {
-      console.log(`❌ Failed to place word: ${word.word}`);
-    }
-  }
-  
-  console.log(`📊 Placed ${newlyPlacedCount} new words, total placed: ${placedCount}/${placedWords.length}`);
-  return placedWords;
-}
+
 
 // Helper function to fill all the unfilled spaces with visual updates
 async function fillEmptySpacesWithUpdates(grid: GridCell[][], availablePositions: boolean[][], set: any): Promise<void> {
@@ -443,72 +361,6 @@ async function fillEmptySpacesWithUpdates(grid: GridCell[][], availablePositions
   }
   
   console.log(`✅ Filled ${filledCount} empty spaces with random letters`);
-}
-
-// Helper function to find all valid positions for a word (systematic approach)
-function findAllValidPositions(
-  word: string,
-  direction: WordSearchWord['direction'],
-  grid: GridCell[][],
-  availablePositions: boolean[][]
-): Array<{ row: number; col: number; overlap: number }> {
-  const gridHeight = grid.length;
-  const gridWidth = grid[0].length;
-  const validPositions: Array<{ row: number; col: number; overlap: number }> = [];
-  
-  // Systematically check all possible positions
-  for (let row = 0; row < gridHeight; row++) {
-    for (let col = 0; col < gridWidth; col++) {
-      const canPlace = canPlaceWord(word, row, col, direction, grid, availablePositions);
-      if (canPlace) {
-        const overlap = calculateOverlap(word, row, col, direction, grid);
-        validPositions.push({ row, col, overlap });
-      }
-    }
-  }
-  
-  // Sort by overlap (descending) - prefer positions with more overlaps
-  return validPositions.sort((a, b) => b.overlap - a.overlap);
-}
-
-// Helper function to calculate word overlap with existing letters
-function calculateOverlap(
-  word: string,
-  startRow: number,
-  startCol: number,
-  direction: WordSearchWord['direction'],
-  grid: GridCell[][]
-): number {
-  let overlap = 0;
-  
-  for (let i = 0; i < word.length; i++) {
-    let row = startRow;
-    let col = startCol;
-    
-    switch (direction) {
-      case 'horizontal':
-        col += i;
-        break;
-      case 'vertical':
-        row += i;
-        break;
-      case 'diagonal-down':
-        row += i;
-        col += i;
-        break;
-      case 'diagonal-up':
-        row -= i;
-        col += i;
-        break;
-    }
-    
-    // Count overlapping letters
-    if (grid[row][col].letter && grid[row][col].letter === word[i].toUpperCase()) {
-      overlap++;
-    }
-  }
-  
-  return overlap;
 }
 
 // Helper function to place word in grid with proper validation
@@ -657,8 +509,6 @@ async function simpleIterativeWordPlacement(
     const remainingSpaces = totalAvailableSpaces - currentPlacedCharacters;
     console.log(`🔄 Iteration ${iterationCount}: ${remainingSpaces} spaces remaining`);
     
-    // Generate a batch of words of various lengths (3-8 characters)
-    const wordLengths = [3, 4, 5, 6, 7, 8];
     const batchSize = 5;
     let wordsPlacedThisIteration = 0;
     

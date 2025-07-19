@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useWordSearchStore } from '@/lib/word-search-store';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -19,7 +19,6 @@ export function WordSearchGrid({ className }: WordSearchGridProps) {
     error,
     paperWidth,
     paperHeight,
-    charactersPerMm,
     actions 
   } = useWordSearchStore();
 
