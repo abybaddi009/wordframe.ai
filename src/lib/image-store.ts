@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { initializeModel, processImageFromDataURL } from './process';
+import { initializeModel, processImageFromDataURL, simpleBackgroundRemoval } from './process';
 
 interface CropArea {
   x: number;
@@ -121,11 +121,43 @@ export const useImageStore = create<ImageProcessingStore>((set, get) => ({
         });
       } catch (error) {
         console.error('❌ Error during background removal:', error);
-        set({
-          isProcessing: false,
-          isInitializingBgRemoval: false,
-          error: error instanceof Error ? error.message : 'Failed to remove background'
-        });
+        
+        const errorMessage = error instanceof Error ? error.message : 'Failed to remove background';
+        
+        // If the error is related to WASM/SharedArrayBuffer issues, try simple fallback
+        if (errorMessage.includes('no available backend found') || 
+            errorMessage.includes('SharedArrayBuffer') ||
+            errorMessage.includes('NetworkError when attempting to fetch resource')) {
+          
+          console.log('🔄 WASM failed, trying simple background removal fallback...');
+          set({ 
+            isInitializingBgRemoval: false,
+            error: null 
+          });
+          
+          try {
+            const processedImageUrl = await simpleBackgroundRemoval(originalImage);
+            console.log('✅ Simple background removal completed successfully');
+            set({
+              backgroundRemovedImage: processedImageUrl,
+              isProcessing: false,
+              step: 'crop'
+            });
+          } catch (fallbackError) {
+            console.error('❌ Simple background removal also failed:', fallbackError);
+            set({
+              isProcessing: false,
+              isInitializingBgRemoval: false,
+              error: 'Background removal failed. You can skip this step and manually crop your image instead.'
+            });
+          }
+        } else {
+          set({
+            isProcessing: false,
+            isInitializingBgRemoval: false,
+            error: errorMessage
+          });
+        }
       }
     },
     

@@ -11,9 +11,28 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    headers: {
+      "Cross-Origin-Embedder-Policy": "require-corp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+    },
+    fs: {
+      allow: ['..']
+    },
+    hmr: {
+      port: 3001
+    }
+  },
+  define: {
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    exclude: ["@huggingface/transformers"],
+  },
   build: {
     rollupOptions: {
       external: ["sharp"]
     }
-  }
+  },
+  assetsInclude: ["**/*.onnx", "**/*.wasm"]
 });

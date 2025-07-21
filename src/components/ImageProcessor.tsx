@@ -248,8 +248,13 @@ export function ImageProcessor({ onComplete, onCancel, aspectRatio }: ImageProce
                     <div className="flex flex-col items-center space-y-2">
                       <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
                       <div className="text-sm text-gray-600">
-                        {isInitializingBgRemoval ? 'Loading model...' : 'Removing background...'}
+                        {isInitializingBgRemoval ? 'Loading AI model...' : 'Removing background...'}
                       </div>
+                      {!isInitializingBgRemoval && (
+                        <div className="text-xs text-gray-500">
+                          If AI model fails, simple fallback will be used
+                        </div>
+                      )}
                     </div>
                   ) : backgroundRemovedImage ? (
                     <img

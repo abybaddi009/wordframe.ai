@@ -100,6 +100,71 @@ Modern browsers with ES6+ support:
 
 This is a landing page project showcasing the WordFrame concept. For contributions or feature requests, please refer to the project guidelines in `.cursorrules`.
 
+## 🌐 Static Hosting Configuration
+
+For the AI background removal to work in production, your static host needs to set specific headers to enable SharedArrayBuffer support:
+
+### Cloudflare Pages
+The `public/_headers` file is already configured. No additional setup needed. Cloudflare Pages will automatically apply these headers.
+
+### Netlify
+The `public/_headers` file is already configured. No additional setup needed.
+
+### Vercel
+The `vercel.json` file is already configured. No additional setup needed.
+
+### GitHub Pages
+Use the included GitHub Actions workflow in `.github/workflows/deploy.yml`. 
+**Note**: GitHub Pages has limitations with CORS headers, so the canvas fallback will be used.
+
+### Apache Servers
+The `public/.htaccess` file is already configured for Apache servers.
+
+### Nginx
+Add this to your nginx configuration:
+```nginx
+location / {
+    add_header Cross-Origin-Embedder-Policy require-corp;
+    add_header Cross-Origin-Opener-Policy same-origin;
+}
+```
+
+### Other Static Hosts
+If your host doesn't support the required headers, the app will automatically fall back to the canvas-based background removal method, which works without special requirements.
+
+## 🔧 Testing Static Build Locally
+
+To test the static build with proper headers:
+
+```bash
+# Build the project
+bun run build
+
+# Test with a local server that supports headers (using serve with CORS)
+bunx serve dist -c serve.json
+```
+
+Create `serve.json` in your project root:
+```json
+{
+  "headers": [
+    {
+      "source": "**/*",
+      "headers": [
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "require-corp"
+        },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## 📄 License
 
 This project is part of the WordFrame application suite.
